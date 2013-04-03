@@ -1,5 +1,5 @@
 {
-	"name": "fresque/fresque",
+	"name": "neoseeker/fresque",
 	"description" : "A command line tool to manage your php-resque workers",
 	"keywords": ["php-resque", "resque", "cli", "redis"],
 	"homepage": "http://kamisama.github.com/Fresque/",
@@ -8,6 +8,11 @@
 			"name": "Wan Chen",
 			"email": "kami@kamisama.me",
 			"homepage": "http://www.kamisama.me"
+		},
+		{
+			"name": "Catherine Koo",
+			"email": "catherinek@neoseeker.com",
+			"role": "Developer"
 		}
 	],
 	"license": "MIT",
