@@ -839,7 +839,7 @@ class Fresque
     {
         $options = ($args === null) ? $this->input->getOptionValues(true) : $args;
 
-        $config = isset($options['config']) ? $options['config'] : '.'.DS.'fresque.ini';
+        $config = isset($options['config']) ? $options['config'] : __DIR__.DS.'..'.DS.'fresque.ini';
         if (!file_exists($config)) {
             $this->output->outputLine("The config file '$config' was not found", 'failure');
             die();
