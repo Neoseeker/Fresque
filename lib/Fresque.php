@@ -396,6 +396,7 @@ class Fresque
             $this->output->outputText(".", 0);
             usleep(150000);
         }
+        usleep(500000);
 
         $workersCountAfter = \Resque::Redis()->scard('workers');
         if (($workersCountBefore + $this->runtime['Default']['workers']) == $workersCountAfter) {
@@ -405,7 +406,7 @@ class Fresque
             $this->output->outputLine(
                 ' Done' . (($this->runtime['Default']['workers'] == 1)
                     ? ''
-                    : ' x' . $
+                    : ' x' .
                     $this->runtime['Default']['workers']
                 ),
                 'success'
