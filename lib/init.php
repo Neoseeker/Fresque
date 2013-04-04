@@ -21,9 +21,9 @@
 if (file_exists(dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . 'autoload.php')) {
     require dirname(dirname(__DIR__)) . DIRECTORY_SEPARATOR . 'autoload.php';
 } else {
-    require dirname(__DIR__) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php';
+    require dirname(__DIR__) . DIRECTORY_SEPARATOR . '../..' . DIRECTORY_SEPARATOR . 'autoload.php';
 }
 require __DIR__ . DIRECTORY_SEPARATOR . 'Fresque.php';
 
-$fresque = new Fresque\Fresque();
+$fresque = new Neoseeker\Fresque();
 

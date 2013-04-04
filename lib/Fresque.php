@@ -16,7 +16,7 @@
  * @license       MIT License (http://www.opensource.org/licenses/mit-license.php)
  */
 
-namespace Fresque;
+namespace Neoseeker;
 
 define('DS', DIRECTORY_SEPARATOR);
 
@@ -34,7 +34,7 @@ class Fresque
     protected $settings;
     protected $runtime;
 
-    const VERSION = '1.1.2';
+    const VERSION = '1.0.0';
 
     public function __construct()
     {
@@ -373,8 +373,9 @@ class Fresque
             $this->runtime = $args;
         }
 
-        $cmd = 'nohup sudo -u '. escapeshellarg($this->runtime['Default']['user']) . ' bash -c "cd ' .
-        escapeshellarg($this->runtime['Fresque']['lib']) . '; VVERBOSE=true' .
+//        $cmd = 'nohup sudo -u '. escapeshellarg($this->runtime['Default']['user']) . ' bash -c "cd ' .
+//        escapeshellarg($this->runtime['Fresque']['lib']) . '; VVERBOSE=true' .
+        $cmd = 'nohup bash -c "cd ' . escapeshellarg($this->runtime['Fresque']['lib']) . ';' .
         ' QUEUE=' . escapeshellarg($this->runtime['Default']['queue']) .
         ' APP_INCLUDE=' . escapeshellarg($this->runtime['Fresque']['include']) .
         ' INTERVAL=' . escapeshellarg($this->runtime['Default']['interval']) .
@@ -384,47 +385,33 @@ class Fresque
         ' COUNT=' . $this->runtime['Default']['workers'] .
         ' LOGHANDLER=' . escapeshellarg($this->runtime['Log']['handler']) .
         ' LOGHANDLERTARGET=' . escapeshellarg($this->runtime['Log']['target']) .
-        ' php ./resque.php';
+        ' php ./bin/resque.php';
         $cmd .= ' >> '. escapeshellarg($this->runtime['Log']['filename']).' 2>&1" >/dev/null 2>&1 &';
 
         $workersCountBefore = \Resque::Redis()->scard('workers');
-        $workersCountAfter = 0;
         passthru($cmd);
 
         $this->output->outputText('Starting worker ');
-
-
-        $success = false;
-        $attempt = 7;
-        while ($attempt-- > 0) {
-            for ($i = 0; $i < 3; $i++) {
-                $this->output->outputText(".", 0);
-                usleep(150000);
-            }
-
-            if (($workersCountBefore + $this->runtime['Default']['workers']) == ($workersCountAfter = \Resque::Redis()->scard('workers'))) {
-                if ($args === null || $new === true) {
-                    $this->addWorker($this->runtime);
-                }
-                $this->output->outputLine(
-                    ' Done' . (($this->runtime['Default']['workers'] == 1)
-                        ? ''
-                        : ' x' . $this->runtime['Default']['workers']
-                    ),
-                    'success'
-                );
-                $success = true;
-                break;
-            }
+        for ($i = 0; $i < 3; $i++) {
+            $this->output->outputText(".", 0);
+            usleep(150000);
         }
 
-        if (!$success) {
-            if ($workersCountBefore === $workersCountAfter) {
-                $this->output->outputLine(' Fail', 'failure');
-            } else {
-                $this->output->outputLine(sprintf(' Error, could not start %s workers', (($workersCountBefore + $this->runtime['Default']['workers']) - $workersCountAfter)), 'warning');
+        $workersCountAfter = \Resque::Redis()->scard('workers');
+        if (($workersCountBefore + $this->runtime['Default']['workers']) == $workersCountAfter) {
+            if ($args === null || $new === true) {
+                $this->addWorker($this->runtime);
             }
-
+            $this->output->outputLine(
+                ' Done' . (($this->runtime['Default']['workers'] == 1)
+                    ? ''
+                    : ' x' . $
+                    $this->runtime['Default']['workers']
+                ),
+                'success'
+            );
+        } else {
+            $this->output->outputLine(' Fail', 'failure');
         }
 
         if ($args === null) {
