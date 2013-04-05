@@ -40,6 +40,9 @@ class Fresque
     {
         $this->command = array_splice($_SERVER['argv'], 1, 1);
         $this->command = empty($this->command) ? null : $this->command[0];
+		if ($this->command == 'start') {
+			$this->command = 'load';
+		}
 
         $this->input = new \ezcConsoleInput();
         $this->output = new \ezcConsoleOutput();
