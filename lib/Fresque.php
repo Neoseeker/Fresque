@@ -19,6 +19,7 @@
 namespace Neoseeker;
 
 define('DS', DIRECTORY_SEPARATOR);
+include __DIR__ . DS . 'DialogMenuValidator.php';
 
 /**
  * Fresque Class
@@ -34,7 +35,7 @@ class Fresque
     protected $settings;
     protected $runtime;
 
-    const VERSION = '1.0.0';
+    const VERSION = '1.1.5';
 
     public function __construct()
     {
@@ -107,6 +108,30 @@ class Fresque
                 false,
                 'Force workers shutdown, forcing all the current jobs to finish (and fail)',
                 'Force workers shutdown, forcing all the current jobs to finish (and fail)'
+            )
+        );
+
+        $this->input->registerOption(
+            new \ezcConsoleOption(
+                'v',
+                'verbose',
+                \ezcConsoleInput::TYPE_NONE,
+                null,
+                false,
+                'Log more verbose informations',
+                'Log more verbose informations'
+            )
+        );
+
+        $this->input->registerOption(
+            new \ezcConsoleOption(
+                'g',
+                'debug',
+                \ezcConsoleInput::TYPE_NONE,
+                null,
+                false,
+                'Print debug informations',
+                'Print debug informations'
             )
         );
 
@@ -253,10 +278,10 @@ class Fresque
                 'start' => array(
                         'help' => 'Start a new worker',
                         'options' => array('u' => 'username', 'q' => 'queue name',
-                                'i' => 'num', 'n' => 'num', 'l' => 'path')),
+                                'i' => 'num', 'n' => 'num', 'l' => 'path', 'v', 'g')),
                 'stop' => array(
                         'help' => 'Shutdown all workers',
-                        'options' => array('f', 'w')),
+                        'options' => array('f', 'w', 'g')),
                 'restart' => array(
                         'help' => 'Restart all workers',
                         'options' => array()),
@@ -280,9 +305,9 @@ class Fresque
 
         if ($this->command === null || !method_exists($this, $this->command)) {
             $this->outputTitle('Welcome to Fresque');
-            $this->output->outputLine('Fresque '. Fresque::VERSION.' by Wan Chen (Kamisama) (2012)');
+            $this->output->outputLine('Fresque '. Fresque::VERSION.' by Wan Chen (Kamisama) (2013)');
 
-            if (!method_exists($this, $this->command) && $this->command !== null) {
+            if (!method_exists($this, $this->command) && $this->command !== null && $this->command !== '--help') {
                 $this->output->outputLine("\nUnrecognized command : " . $this->command, 'failure');
             }
 
@@ -376,46 +401,62 @@ class Fresque
             $this->runtime = $args;
         }
 
-//        $cmd = 'nohup sudo -u '. escapeshellarg($this->runtime['Default']['user']) . ' bash -c "cd ' .
-//        escapeshellarg($this->runtime['Fresque']['lib']) . '; VVERBOSE=true' .
-        $cmd = 'nohup bash -c "cd ' . escapeshellarg($this->runtime['Fresque']['lib']) . '; VERBOSE=true' .
-        ' QUEUE=' . escapeshellarg($this->runtime['Default']['queue']) .
-        ' APP_INCLUDE=' . escapeshellarg($this->runtime['Fresque']['include']) .
-        ' INTERVAL=' . escapeshellarg($this->runtime['Default']['interval']) .
-        ' REDIS_BACKEND=' . escapeshellarg($this->runtime['Redis']['host'] . ':' . $this->runtime['Redis']['port']) .
-        ' REDIS_DATABASE=' . escapeshellarg($this->runtime['Redis']['database']) .
-        ' REDIS_NAMESPACE=' . escapeshellarg($this->runtime['Redis']['namespace']) .
-        ' COUNT=' . $this->runtime['Default']['workers'] .
-        ' LOGHANDLER=' . escapeshellarg($this->runtime['Log']['handler']) .
-        ' LOGHANDLERTARGET=' . escapeshellarg($this->runtime['Log']['target']) .
-        ' php ./bin/resque.php';
+        $cmd = 'nohup bash -c "cd ' .
+        escapeshellarg($this->runtime['Fresque']['lib']) . '; ' . " \\\n".
+        (($this->runtime['Default']['verbose']) ? 'VVERBOSE' : 'VERBOSE') . '=true ' . " \\\n".
+        'QUEUE=' . escapeshellarg($this->runtime['Default']['queue']) . " \\\n".
+        'APP_INCLUDE=' . escapeshellarg($this->runtime['Fresque']['include']) . " \\\n".
+        'INTERVAL=' . escapeshellarg($this->runtime['Default']['interval']) . " \\\n".
+        'REDIS_BACKEND=' . escapeshellarg($this->runtime['Redis']['host'] . ':' . $this->runtime['Redis']['port']) . " \\\n".
+        'REDIS_DATABASE=' . escapeshellarg($this->runtime['Redis']['database']) . " \\\n".
+        'REDIS_NAMESPACE=' . escapeshellarg($this->runtime['Redis']['namespace']) . " \\\n".
+        'COUNT=' . $this->runtime['Default']['workers'] . " \\\n".
+        'LOGHANDLER=' . escapeshellarg($this->runtime['Log']['handler']) . " \\\n".
+        'LOGHANDLERTARGET=' . escapeshellarg($this->runtime['Log']['target']) . " \\\n".
+        'php ' . $this->getResqueBinFile($this->runtime['Fresque']['lib']) . " \\\n";
         $cmd .= ' >> '. escapeshellarg($this->runtime['Log']['filename']).' 2>&1" >/dev/null 2>&1 &';
+
+        if ($this->debug) {
+            $this->output->outputLine("[DEBUG] Running command :\n\t" . str_replace("\n", "\n\t", $cmd), 'success');
+        }
 
         $workersCountBefore = \Resque::Redis()->scard('workers');
         passthru($cmd);
 
         $this->output->outputText('Starting worker ');
-        for ($i = 0; $i < 3; $i++) {
-            $this->output->outputText(".", 0);
-            usleep(150000);
+
+        $success = false;
+        $attempt = 7;
+        while ($attempt-- > 0) {
+            for ($i = 0; $i < 3; $i++) {
+                $this->output->outputText(".", 0);
+                usleep(150000);
+            }
+
+            if (($workersCountBefore + $this->runtime['Default']['workers']) == ($workersCountAfter = \Resque::Redis()->scard('workers'))) {
+                if ($args === null || $new === true) {
+                    $this->addWorker($this->runtime);
+                }
+                $this->output->outputLine(
+                    ' Done' . (($this->runtime['Default']['workers'] == 1)
+                        ? ''
+                        : ' x' . $this->runtime['Default']['workers']
+                    ),
+                    'success'
+                );
+                $success = true;
+                break;
+            }
         }
         usleep(500000);
 
-        $workersCountAfter = \Resque::Redis()->scard('workers');
-        if (($workersCountBefore + $this->runtime['Default']['workers']) == $workersCountAfter) {
-            if ($args === null || $new === true) {
-                $this->addWorker($this->runtime);
+        if (!$success) {
+            if ($workersCountBefore === $workersCountAfter) {
+                $this->output->outputLine(' Fail', 'failure');
+            } else {
+                $this->output->outputLine(sprintf(' Error, could not start %s workers', (($workersCountBefore + $this->runtime['Default']['workers']) - $workersCountAfter)), 'warning');
             }
-            $this->output->outputLine(
-                ' Done' . (($this->runtime['Default']['workers'] == 1)
-                    ? ''
-                    : ' x' .
-                    $this->runtime['Default']['workers']
-                ),
-                'success'
-            );
-        } else {
-            $this->output->outputLine(' Fail', 'failure');
+
         }
 
         if ($args === null) {
@@ -432,12 +473,32 @@ class Fresque
         $force = $this->input->getOption('force')->value;
         $all = $this->input->getOption('all')->value;
 
+        if ($this->debug) {
+            if ($force) {
+                $this->output->outputLine("[DEBUG] 'Force' option detected, will force shutdown workers", 'success');
+            }
+
+            if ($all) {
+                $this->output->outputLine("[DEBUG] 'All' option detected, will shutdown all workers", 'success');
+            }
+
+        }
+
         $this->outputTitle('Stopping Workers', $shutdown);
+
+        if ($this->debug) {
+            $this->output->outputLine("[DEBUG] Searching for active workers", 'success');
+        }
+
         $workers = \Resque_Worker::all();
         sort($workers);
         if (empty($workers)) {
             $this->output->outputLine('There is no active workers to kill ...', 'failure');
         } else {
+
+            if ($this->debug) {
+                $this->output->outputLine("[DEBUG] Found " . count($workers) . " active workers", 'success');
+            }
 
             $workersToKill = array();
 
@@ -522,7 +583,13 @@ class Fresque
             $this->output->outputLine("You have no configured workers to load.\n", 'failure');
         } else {
             $this->output->outputLine(sprintf('Loading %s workers', count($this->settings['Queues'])));
+
+            $config = $this->config;
+            $debug = $this->debug;
+
             foreach ($this->settings['Queues'] as $queue) {
+                $queue['config'] = $config;
+                $queue['debug'] = $debug;
                 $this->loadSettings($queue);
                 $this->start($this->runtime);
             }
@@ -723,6 +790,8 @@ class Fresque
             $results['Redis configuration'] = 'Unable to read redis server configuration';
         }
 
+        $this->runtime['Fresque']['lib'] = $this->absolutePath($this->runtime['Fresque']['lib']);
+
         if (!is_dir($this->runtime['Fresque']['lib']) || !is_dir($this->runtime['Fresque']['lib'])) {
             $results['PHPResque library'] =
                 'Unable to found PHP Resque library. Check that the path is valid, and directory is readable';
@@ -733,12 +802,10 @@ class Fresque
                 require_once($this->runtime['Fresque']['lib'] . DS . 'lib' . DS . 'Resque' . DS.'Redis.php');
                 $redis = @new \Resque_Redis($this->runtime['Redis']['host'], (int) $this->runtime['Redis']['port']);
 
-            }
-            elseif (class_exists('Redis')) {
+            } elseif (class_exists('Redis')) {
                 $redis = new \Redis();
                 @$redis->connect($this->runtime['Redis']['host'], (int) $this->runtime['Redis']['port']);
-            }
-            elseif (class_exists('Redisent')) {
+            } elseif (class_exists('Redisent')) {
                 $redis = @new \Redisent($this->runtime['Redis']['host'], (int) $this->runtime['Redis']['port']);
             } else {
                 $results['Redis server'] = 'Unable to find Redis Api';
@@ -749,18 +816,12 @@ class Fresque
         }
 
 
-        if (substr($this->runtime['Log']['filename'], 0, 2) == './') {
-            $this->runtime['Log']['filename'] = dirname(__DIR__) . DS .
-                substr($this->runtime['Log']['filename'], 2);
-        } elseif (substr($this->runtime['Log']['filename'], 0, 1) != '/') {
-            $this->runtime['Log']['filename'] = dirname(__DIR__) . DS . $this->runtime['Log']['filename'];
-        }
+        $this->runtime['Log']['filename'] = $this->absolutePath($this->runtime['Log']['filename']);
 
         $logPath = pathinfo($this->runtime['Log']['filename'], PATHINFO_DIRNAME);
         if (!is_dir($logPath)) {
             $results['Log File'] = 'The directory for the log file does not exists';
-        }
-        elseif (!is_writable($logPath)) {
+        } elseif (!is_writable($logPath)) {
             $results['Log File'] = 'The directory for the log file is not writable';
         }
 
@@ -776,10 +837,7 @@ class Fresque
                 'lib'.DS.'Resque'.DS.'Worker.php'
         );
 
-        if (substr($this->runtime['Fresque']['lib'], 0, 2) == './') {
-            $this->runtime['Fresque']['lib'] = dirname(__DIR__) . DS .
-            substr($this->runtime['Fresque']['lib'], 2);
-        }
+
 
         $found = true;
         foreach ($resqueFiles as $file) {
@@ -789,19 +847,11 @@ class Fresque
             }
         }
 
-        if (!empty($this->runtime['Fresque']['lib']) && $found) {
-            foreach ($resqueFiles as $file) {
-                require_once $this->runtime['Fresque']['lib'] . DS . $file;
-            }
-        } else {
+        if (!$found) {
             $results['PHPResque library'] = 'Unable to find PHPResque library';
         }
 
-
-        if (substr($this->runtime['Fresque']['include'], 0, 2) == './') {
-            $this->runtime['Fresque']['include'] = dirname(__DIR__) . DS .
-            substr($this->runtime['Fresque']['include'], 2);
-        }
+        $this->runtime['Fresque']['include'] = $this->absolutePath($this->runtime['Fresque']['include']);
         if (!file_exists($this->runtime['Fresque']['include'])) {
             $results['Application autoloader'] = 'Your application autoloader file was not found';
         }
@@ -842,13 +892,15 @@ class Fresque
     {
         $options = ($args === null) ? $this->input->getOptionValues(true) : $args;
 
-        $config = isset($options['config']) ? $options['config'] : __DIR__.DS.'..'.DS.'fresque.ini';
-        if (!file_exists($config)) {
-            $this->output->outputLine("The config file '$config' was not found", 'failure');
+        $this->config = isset($options['config']) ? $options['config'] : __DIR__.DS.'..'.DS.'fresque.ini';
+        if (!file_exists($this->config)) {
+            $this->output->outputLine("The config file '$this->config' was not found", 'failure');
             die();
         }
 
-        $this->settings = $this->runtime = parse_ini_file($config, true);
+        $this->debug = isset($options['debug']) && $options['debug'] ? true : false;
+
+        $this->settings = $this->runtime = parse_ini_file($this->config, true);
 
         $this->runtime['Redis']['host'] = isset($options['host']) ? $options['host'] : $this->settings['Redis']['host'];
         $this->runtime['Redis']['port'] = isset($options['port']) ? $options['port'] : $this->settings['Redis']['port'];
@@ -888,6 +940,9 @@ class Fresque
                 $this->settings['Queues'][$name]['queue'] = $name;
             }
         }
+
+        $this->runtime['Default']['verbose'] = ($this->input->getOption('verbose')->value)
+            ? $this->input->getOption('verbose')->value : $this->settings['Default']['verbose'];
 
         if ($this->command != 'test') {
             $results = $this->testConfig();
@@ -996,43 +1051,36 @@ class Fresque
         // Prepend 'since ' or whatever you like
         return $interval->format($format);
     }
-}
 
-
-/**
- * DialogMenuValidator Class
- *
- * ezComponent class for validating dialog menu input
- *
- * @since 1.0.0
- */
-class DialogMenuValidator implements \ezcConsoleMenuDialogValidator
-{
-    protected $elements = array();
-
-    public function __construct($elements)
+    private function absolutePath($path)
     {
-        $this->elements = $elements;
+        if (substr($path, 0, 2) == './') {
+            $path = dirname(__DIR__) . DS . substr($path, 2);
+        } elseif (substr($path, 0, 1) !== '/' || substr($path, 0, 3) == '../') {
+            $path = dirname(__DIR__) . DS . $path;
+        }
+        return rtrim($path, DS);
     }
 
-    public function fixup($result)
-    {
-        return (string)$result;
-    }
 
-    public function getElements()
+    /**
+     * Return the php-resque executable file
+     *
+     * Maintain backward compatibility, as newer version of
+     * php-resque has that file in another location
+     *
+     * @since  1.1.6
+     * @param  String $base Php-resque folder path
+     * @return String Relative path to php-resque executable file
+     */
+    private function getResqueBinFile($base)
     {
-        return $this->elements;
-    }
-
-    public function getResultString()
-    {
-
-    }
-
-    public function validate($result)
-    {
-        return in_array($result, array_keys($this->elements));
+        if (file_exists($base . DS . 'bin' . DS . 'resque')) {
+            return '.' . DS . 'bin' . DS .'resque';
+        } elseif (file_exists($base . DS .'bin' . DS . 'resque.php')) {
+            return '.' . DS . 'bin' . DS .'resque.php';
+        } else {
+            return '.' . DS .'resque.php';
+        }
     }
 }
-

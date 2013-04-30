@@ -1,5 +1,18 @@
 ##Changelog
 
+###v1.1.5 (2013-04-15)
+
+* [fix] Fix composer
+
+###v1.1.4 (2013-04-15)
+
+* [fix] Move php-resque library to suggest, to avoid conflict when using a forked php-resque
+
+###v1.1.3 (2013-04-14)
+
+* [fix] Add log verbose option
+* [fix] `--help` only, without arguments will display the global help/usage
+
 ###v1.1.2 (2013-02-07)
 
 * [fix] Fix error while starting multiple workers
