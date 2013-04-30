@@ -378,7 +378,7 @@ class Fresque
 
 //        $cmd = 'nohup sudo -u '. escapeshellarg($this->runtime['Default']['user']) . ' bash -c "cd ' .
 //        escapeshellarg($this->runtime['Fresque']['lib']) . '; VVERBOSE=true' .
-        $cmd = 'nohup bash -c "cd ' . escapeshellarg($this->runtime['Fresque']['lib']) . ';' .
+        $cmd = 'nohup bash -c "cd ' . escapeshellarg($this->runtime['Fresque']['lib']) . '; VERBOSE=true' .
         ' QUEUE=' . escapeshellarg($this->runtime['Default']['queue']) .
         ' APP_INCLUDE=' . escapeshellarg($this->runtime['Fresque']['include']) .
         ' INTERVAL=' . escapeshellarg($this->runtime['Default']['interval']) .
